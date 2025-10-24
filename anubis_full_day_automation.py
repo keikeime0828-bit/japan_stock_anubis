@@ -10,7 +10,7 @@ from utils import select_symbols_anubis_logic, calculate_technical_indicators
 DATA_DIR = 'data'
 LOG_DIR = 'logs'
 LEARNING_FILE = os.path.join(DATA_DIR, 'learning_record.csv')
-SELECTED_SYMBOLS = []  # ①②③で選定された銘柄
+SELECTED_SYMBOLS = []
 
 # ディレクトリ作成
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -26,21 +26,17 @@ def log(msg):
         f.write(f"[{timestamp}] {msg}\n")
 
 # -----------------------------
-# 学習記録の読み込み（空ファイル対応）
+# 学習記録の読み込み
 # -----------------------------
-try:
+if os.path.exists(LEARNING_FILE):
     learning_df = pd.read_csv(LEARNING_FILE)
-    if learning_df.empty:
-        learning_df = pd.DataFrame(columns=['date','symbol','sim_price','real_price','discrepancy'])
-except (FileNotFoundError, pd.errors.EmptyDataError):
+else:
     learning_df = pd.DataFrame(columns=['date','symbol','sim_price','real_price','discrepancy'])
-    learning_df.to_csv(LEARNING_FILE, index=False)
 
 # -----------------------------
 # 1日分シミュレーション
 # -----------------------------
 def simulate_day():
-    # ①②③ロジックで銘柄選定
     global SELECTED_SYMBOLS
     selected_symbols = select_symbols_anubis_logic()
     SELECTED_SYMBOLS = selected_symbols[:10]  # 厳選10銘柄
@@ -53,29 +49,34 @@ def simulate_day():
     sim_times = pd.date_range("08:40", "15:00", freq="10min").time
 
     for t in sim_times:
-        # リアル株価・板情報・材料取得
         prices = get_realtime_prices(SELECTED_SYMBOLS)
         board = get_board_info(SELECTED_SYMBOLS)
         news = get_news_materials(SELECTED_SYMBOLS)
-
-        # テクニカル計算
         indicators = calculate_technical_indicators(prices)
 
-        # 仮想取引（板・材料・指標で売買判定）
+        # 仮想取引
         for s in SELECTED_SYMBOLS:
             if indicators[s]['momentum'] > 0 and board[s]['buy_pressure'] > 0.6:
                 vt_positions[s] += 100
             elif indicators[s]['momentum'] < 0 and vt_positions[s] > 0:
                 vt_positions[s] -= 100
 
-        # 乖離計算と学習記録更新
+        # 乖離計算と学習記録更新（安全補正）
         for s in SELECTED_SYMBOLS:
             sim = vt_positions[s] * prices[s]
             real = prices[s]
             discrepancy = (sim - real) / real
-            # 乖離が大きければポジション補正
-            if abs(discrepancy) > 0.01:
+
+            # 補正範囲を ±20% に制限
+            if abs(discrepancy) > 0.2:
+                discrepancy = 0.2 * (1 if discrepancy > 0 else -1)
+
+            # ポジション補正（Overflow 回避）
+            try:
                 vt_positions[s] = int(vt_positions[s] * (1 - discrepancy))
+            except OverflowError:
+                vt_positions[s] = vt_positions[s] // 2
+
             # 学習データ追加
             learning_df.loc[len(learning_df)] = {
                 'date': datetime.date.today(),
