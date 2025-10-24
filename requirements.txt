@@ -3,3 +3,4 @@ slack_sdk
 yfinance
 requests
 beautifulsoup4
+lxml
