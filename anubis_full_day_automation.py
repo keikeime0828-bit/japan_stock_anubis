@@ -10,7 +10,7 @@ from utils import select_symbols_anubis_logic, calculate_technical_indicators
 DATA_DIR = 'data'
 LOG_DIR = 'logs'
 LEARNING_FILE = os.path.join(DATA_DIR, 'learning_record.csv')
-SELECTED_SYMBOLS = []
+SELECTED_SYMBOLS = []  # ①②③で選定された銘柄
 
 # ディレクトリ作成
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -26,10 +26,15 @@ def log(msg):
         f.write(f"[{timestamp}] {msg}\n")
 
 # -----------------------------
-# 学習記録の読み込み
+# 学習記録の読み込み（空ファイル対策）
 # -----------------------------
 if os.path.exists(LEARNING_FILE):
-    learning_df = pd.read_csv(LEARNING_FILE)
+    try:
+        learning_df = pd.read_csv(LEARNING_FILE)
+        if learning_df.empty:
+            learning_df = pd.DataFrame(columns=['date','symbol','sim_price','real_price','discrepancy'])
+    except pd.errors.EmptyDataError:
+        learning_df = pd.DataFrame(columns=['date','symbol','sim_price','real_price','discrepancy'])
 else:
     learning_df = pd.DataFrame(columns=['date','symbol','sim_price','real_price','discrepancy'])
 
@@ -52,32 +57,28 @@ def simulate_day():
         prices = get_realtime_prices(SELECTED_SYMBOLS)
         board = get_board_info(SELECTED_SYMBOLS)
         news = get_news_materials(SELECTED_SYMBOLS)
+
         indicators = calculate_technical_indicators(prices)
 
-        # 仮想取引
         for s in SELECTED_SYMBOLS:
+            # 買い/売り/ホールド判定（例）
             if indicators[s]['momentum'] > 0 and board[s]['buy_pressure'] > 0.6:
                 vt_positions[s] += 100
             elif indicators[s]['momentum'] < 0 and vt_positions[s] > 0:
                 vt_positions[s] -= 100
 
-        # 乖離計算と学習記録更新（安全補正）
+        # 乖離計算と学習記録更新
         for s in SELECTED_SYMBOLS:
             sim = vt_positions[s] * prices[s]
             real = prices[s]
             discrepancy = (sim - real) / real
 
-            # 補正範囲を ±20% に制限
-            if abs(discrepancy) > 0.2:
-                discrepancy = 0.2 * (1 if discrepancy > 0 else -1)
+            # 無限大や過大数値防止
+            if abs(discrepancy) > 1:
+                discrepancy = 0.0
 
-            # ポジション補正（Overflow 回避）
-            try:
-                vt_positions[s] = int(vt_positions[s] * (1 - discrepancy))
-            except OverflowError:
-                vt_positions[s] = vt_positions[s] // 2
+            vt_positions[s] = int(vt_positions[s] * (1 - discrepancy))
 
-            # 学習データ追加
             learning_df.loc[len(learning_df)] = {
                 'date': datetime.date.today(),
                 'symbol': s,
@@ -88,7 +89,6 @@ def simulate_day():
 
         log(f"Time {t} | Positions: {vt_positions} | Prices: {prices}")
 
-    # 学習結果保存
     learning_df.to_csv(LEARNING_FILE, index=False)
     log("Day simulation complete and learning record updated.")
 
