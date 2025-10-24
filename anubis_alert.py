@@ -1,13 +1,13 @@
+import os
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 
-SLACK_TOKEN = "xoxb-XXXXXXXXXXXXXXXXXXXX"
-SLACK_CHANNEL = "#anubis_alert"
+SLACK_TOKEN = os.environ.get("SLACK_TOKEN")  # GitHub Secretsで設定
+SLACK_CHANNEL = "#anubis-alert"             # 通知先チャンネル
 
-client = WebClient(token=SLACK_TOKEN)
-
-def send_alert(message):
+def send_slack_message(text):
+    client = WebClient(token=SLACK_TOKEN)
     try:
-        client.chat_postMessage(channel=SLACK_CHANNEL, text=message)
+        client.chat_postMessage(channel=SLACK_CHANNEL, text=text)
     except SlackApiError as e:
-        print(f"Slack通知エラー: {e.response['error']}")
+        print("Slack通知エラー:", e.response["error"])
