@@ -28,11 +28,13 @@ def log(msg):
 # -----------------------------
 # 学習記録の読み込み（空ファイル対応）
 # -----------------------------
-if not os.path.exists(LEARNING_FILE) or os.path.getsize(LEARNING_FILE) == 0:
+try:
+    learning_df = pd.read_csv(LEARNING_FILE)
+    if learning_df.empty:
+        learning_df = pd.DataFrame(columns=['date','symbol','sim_price','real_price','discrepancy'])
+except (FileNotFoundError, pd.errors.EmptyDataError):
     learning_df = pd.DataFrame(columns=['date','symbol','sim_price','real_price','discrepancy'])
     learning_df.to_csv(LEARNING_FILE, index=False)
-else:
-    learning_df = pd.read_csv(LEARNING_FILE)
 
 # -----------------------------
 # 1日分シミュレーション
@@ -59,21 +61,21 @@ def simulate_day():
         # テクニカル計算
         indicators = calculate_technical_indicators(prices)
 
-        # 仮想取引（単純例：板・材料・指標で売買判定）
+        # 仮想取引（板・材料・指標で売買判定）
         for s in SELECTED_SYMBOLS:
-            # ここで買い/売り/ホールド判定を実施
             if indicators[s]['momentum'] > 0 and board[s]['buy_pressure'] > 0.6:
-                vt_positions[s] += 100  # 100株買い
+                vt_positions[s] += 100
             elif indicators[s]['momentum'] < 0 and vt_positions[s] > 0:
-                vt_positions[s] -= 100  # 100株売り
+                vt_positions[s] -= 100
 
         # 乖離計算と学習記録更新
         for s in SELECTED_SYMBOLS:
             sim = vt_positions[s] * prices[s]
             real = prices[s]
             discrepancy = (sim - real) / real
+            # 乖離が大きければポジション補正
             if abs(discrepancy) > 0.01:
-                vt_positions[s] = int(vt_positions[s] * (1 - discrepancy))  # 調整
+                vt_positions[s] = int(vt_positions[s] * (1 - discrepancy))
             # 学習データ追加
             learning_df.loc[len(learning_df)] = {
                 'date': datetime.date.today(),
