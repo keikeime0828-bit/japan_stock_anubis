@@ -26,12 +26,13 @@ def log(msg):
         f.write(f"[{timestamp}] {msg}\n")
 
 # -----------------------------
-# 学習記録の読み込み
+# 学習記録の読み込み（空ファイル対応）
 # -----------------------------
-if os.path.exists(LEARNING_FILE):
-    learning_df = pd.read_csv(LEARNING_FILE)
-else:
+if not os.path.exists(LEARNING_FILE) or os.path.getsize(LEARNING_FILE) == 0:
     learning_df = pd.DataFrame(columns=['date','symbol','sim_price','real_price','discrepancy'])
+    learning_df.to_csv(LEARNING_FILE, index=False)
+else:
+    learning_df = pd.read_csv(LEARNING_FILE)
 
 # -----------------------------
 # 1日分シミュレーション
@@ -61,7 +62,6 @@ def simulate_day():
         # 仮想取引（単純例：板・材料・指標で売買判定）
         for s in SELECTED_SYMBOLS:
             # ここで買い/売り/ホールド判定を実施
-            # 実装例: 上昇モメンタム & 板買い優勢なら買い
             if indicators[s]['momentum'] > 0 and board[s]['buy_pressure'] > 0.6:
                 vt_positions[s] += 100  # 100株買い
             elif indicators[s]['momentum'] < 0 and vt_positions[s] > 0:
