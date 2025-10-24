@@ -1,0 +1,33 @@
+name: Anubis Full Automation
+
+on:
+  schedule:
+    # 日本時間 8:40 JST 平日
+    - cron: "40 23 * * 1-5"
+  workflow_dispatch:  # 手動実行可能
+
+jobs:
+  run-anubis:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      # Slack Token 設定
+      - name: Set Slack Token
+        run: echo "SLACK_TOKEN=${{ secrets.SLACK_TOKEN }}" >> $GITHUB_ENV
+
+      # フルデイ自動化実行
+      - name: Run Full Day Automation
+        run: |
+          python anubis_full_day_automation.py
